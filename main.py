@@ -80,12 +80,21 @@ def get_attributes(service,num):
         try:
             value = removeNonAscii(value)
         except:
-            value = value
-        if key != "friendly name" and key != "unit of measurement":
-            attributes.append("{0}: {1}".format(key ,value).replace("\n", ""))
-        joined_attributes = ', '.join(attributes)
-        if joined_attributes == "":
-            joined_attributes = "N/A"
+            pass
+        if isinstance(value, list):
+            v = int(len(value))
+            for i in range(v):
+                if key != "friendly name" and key != "unit of measurement":
+                    attributes.append("{0}".format(value[i]).replace("\n", ""))
+                joined_attributes = ', '.join(attributes)
+                if joined_attributes == "":
+                    joined_attributes = "N/A"
+        else:
+            if key != "friendly name" and key != "unit of measurement":
+                attributes.append("{0}: {1}".format(key ,value).replace("\n", ""))
+            joined_attributes = ', '.join(attributes)
+            if joined_attributes == "":
+                joined_attributes = "N/A"
     return joined_attributes.strip()
 
 def get_type(entity_id):
@@ -106,28 +115,26 @@ def get_icon(entity_id,state):
 
 class homeassistant(Wox):
     #Active, toggle, trigger service
-    def activate(self, service, title, query, arg):
-        action = "toggle"
+    def activate(self, service, title, query, arg, action=""):
+        if action == "":
+            action = "toggle"
         if get_type(service) == "media_player":
             action = "media_play_pause"
-        if query != title:
+        if query != title and query != arg + " " + title:
             action = None
             if arg in get_services():
                 WoxAPI.change_query("ha " + arg + " " + title + " ",True)
             else:
                 WoxAPI.change_query("ha " + title + " ",True)
-        try:
-            if action != None:
-                post_data('http://' + ha_ip + ':' + ha_port + '/api/services/' + str(get_type(service)) + '/' + str(action) + '?api_password=' + ha_password,{ "entity_id": str(service) })
-                #WoxAPI.start_loadingbar(self)
-                #time.sleep(0.8)
-                #WoxAPI.stop_loadingbar(self)
-                #if query.endswith("trigger"):
-                    #WoxAPI.change_query("dimming " + fn,True)
-                #else:
-                #WoxAPI.change_query("ha " + fn,True)
-        except:
-            pass
+        if action != None:
+            post_data('http://' + ha_ip + ':' + ha_port + '/api/services/' + str(get_type(service)) + '/' + str(action) + '?api_password=' + ha_password,{ "entity_id": str(service) })
+            #WoxAPI.start_loadingbar(self)
+            #time.sleep(0.8)
+            #WoxAPI.stop_loadingbar(self)
+            #if query.endswith("trigger"):
+                #WoxAPI.change_query("dimming " + fn,True)
+            #else:
+            #WoxAPI.change_query("ha " + fn,True)
 
     def adjust_brightness(self, entity_id, percentage, delay=4):
         brightness = 255 * int(percentage) / 100
@@ -222,7 +229,7 @@ class homeassistant(Wox):
                     if not query.lower().replace(title.lower(),"",1).strip().startswith("info".lower()):
                         if get_type(entity_id) == "light":
                             ico = get_icon(entity_id, state)
-                            percentage = query.lower().replace(title.lower(),"",1).strip()
+                            percentage = query.lower().replace(title.lower(),"",1).replace("light","",1).strip()
                             results.append({
                                 "Title": "Adjust Brightness",
                                 "SubTitle": "Adjust brightness level to " + query.replace(title.lower(),"",1).lower().strip() + "%",
@@ -230,6 +237,27 @@ class homeassistant(Wox):
                                 "JsonRPCAction":{
                                   "method": "adjust_brightness",
                                   "parameters":[entity_id,percentage],
+                                  "dontHideAfterAction":True
+                                }
+                            })
+                            results.append({
+                                "Title": "Toggle",
+                                "SubTitle": "Toggle " + title,
+                                "IcoPath":ico,
+                                "JsonRPCAction":{
+                                  "method": "activate",
+                                  "parameters":[entity_id,title,query,argument[0]],
+                                  "dontHideAfterAction":True
+                                }
+                            })
+                        elif get_type(entity_id) == "automation":
+                            results.append({
+                                "Title": "Trigger",
+                                "SubTitle": "Trigger " + title,
+                                "IcoPath":ico,
+                                "JsonRPCAction":{
+                                  "method": "activate",
+                                  "parameters":[entity_id,title,query,argument[0],"trigger"],
                                   "dontHideAfterAction":True
                                 }
                             })
@@ -268,16 +296,30 @@ class homeassistant(Wox):
                             })
                     if query.lower().replace(title.lower(),"",1).strip().startswith("info".lower()):
                         results = []
+                        ico = './icons/icons_' + icon_color + '/info.png'
                         for g in range(len(service[x]["attributes"].keys())):
                             key = list(service[x]["attributes"].keys())[g].replace("_"," ")
                             value = service[x]["attributes"].values()[g]
                             try:
                                 value = removeNonAscii(value)
                             except:
-                                value = value
-                            ico = './icons/icons_' + icon_color + '/info.png'
-                            if key != "friendly name" and key != "unit of measurement":
-                                if query.lower().replace(title.lower(),"",1).replace("info","",1).lower().strip().lower() in str(value).lower().strip().lower():
+                                pass
+                            if isinstance(value, list):
+                                v = int(len(value))
+                                for i in range(v):
+                                    if key != "friendly name" and key != "unit of measurement":
+                                        results.append({
+                                            "Title": value[i],
+                                            "SubTitle": key,
+                                            "IcoPath": ico,
+                                            "JsonRPCAction": {
+                                                "method": "Wox.ChangeQuery",
+                                                "parameters": ["ha " + str(value[i]).split(".")[0] + " " + str(value[i]).split(".")[1].replace("_"," "), True],
+                                                "dontHideAfterAction": True
+                                            }
+                                        })
+                            else:
+                                if key != "friendly name" and key != "unit of measurement":
                                     results.append({
                                         "Title": value,
                                         "SubTitle": key,
@@ -288,6 +330,7 @@ class homeassistant(Wox):
                                             "dontHideAfterAction": True
                                         }
                                     })
+
         #----No user input except action word
         else:
             for keywords in get_services():
