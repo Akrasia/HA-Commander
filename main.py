@@ -1,15 +1,14 @@
 from wox import Wox,WoxAPI
 # -*- coding: utf-8 -*-
 import urllib2,json,os.path
-#import time
 
-
-ha_ip = "10.0.0.206"
+ha_ip = "127.0.0.1"
 ha_port = "8123"
-ha_password = "akrasia1"
+ha_password = "my_password"
 url = 'http://' + ha_ip + ':' + ha_port + '/api/states?api_password=' + ha_password
 icon_color = 'white'
-key_services = ["group", "automation", "device_tracker", "sensor", "switch", "zone", "sun", "light", "switch", "media_player", "binary_sensor", "device_tracker", "persistent_notification"]
+domains = []
+services = []
 
 def post_data(url, postdata):
     # create the request object and set some headers
@@ -26,32 +25,52 @@ def post_data(url, postdata):
 
 def removeNonAscii(s): return "".join(filter(lambda x: ord(x)<128, s))
 
-#def get_services(service=None):
-#    if key_services != None:
-#        data = post_data('http://' + ha_ip + ':' + ha_port + '/api/bootstrap' + '?api_password=' + ha_password,"")
-#        for s in len(data['services']):
-#            key_services.append(services)
+def get_domains():
+    global domains
+    if not domains:
+        data = post_data('http://' + ha_ip + ':' + ha_port + '/api/bootstrap' + '?api_password=' + ha_password,"")
+        generator = ( item['domain'] for item in data['services'] )
+        for d in generator:
+            domains.append(str(d))
+    else:
+        pass
+    return domains
 
-def get_entity(type=None):
-    services = []
+def get_services():
+    global services
+    if not services:
+        entities = get_entity("")
+        services = []
+        generator = ( item['entity_id'] for item in entities )
+        for e in generator:
+            if not get_type(str(e)) in services:
+                services.append(get_type(str(e)))
+    else:
+        pass
+    global domains
+    domains = services
+    return services
+
+def get_entity(type=""):
+    entities = []
     try:
         if type.endswith("s"):
             type = type.rstrip("s")
         states = post_data(url,"")
         #returns all states
-        if type == None:
-            services = states
+        if type == "":
+            entities = states
         #returns states filtered by service
-        elif type in key_services:
+        elif type in get_services():
             for i in range(0, len(states)):
                 if states[i]["entity_id"].startswith(type + "."):
-                    services.append(states[i])
+                    entities.append(states[i])
         else:
             #raise ValueError("Invalid service provided")
-            services = states
+            entities = states
     except:
-        services = -1
-    return services
+        entities = -1
+    return entities
 
 def get_attributes(service,num):
     attributes = []
@@ -93,7 +112,7 @@ class homeassistant(Wox):
             action = "media_play_pause"
         if query != title:
             action = None
-            if arg in key_services:
+            if arg in get_services():
                 WoxAPI.change_query("ha " + arg + " " + title + " ",True)
             else:
                 WoxAPI.change_query("ha " + title + " ",True)
@@ -136,13 +155,13 @@ class homeassistant(Wox):
         argument = query.split()
         #---handle connection errors
         if len(argument) >= 1:
-            for keywords in key_services:
+            for keywords in get_services():
                 title = keywords
                 subtext = keywords
                 ico = './icons/icons_' + icon_color + "/filter.png"
                 if query.strip().lower() in keywords.lower():
                     #---add filters to results
-                    if argument[0] not in key_services:
+                    if argument[0] not in get_services():
                         results.append({
                             "Title": "Filter by: [" + keywords + "]",
                             "SubTitle": "show " + keywords + " services only",
@@ -171,7 +190,7 @@ class homeassistant(Wox):
                 ico = get_icon(entity_id,state)
                 subtext = get_attributes(service,x)
                 #----Check if user is refrencing a service keyword and filters it out of query
-                if argument[0].rstrip("s") in key_services:
+                if argument[0].rstrip("s") in get_services():
                     if query.replace(argument[0],"",1).strip().lower() in title.lower():
                         results.append({
                             "Title": title + " is " + '\"' + state + '\"',
@@ -271,7 +290,7 @@ class homeassistant(Wox):
                                     })
         #----No user input except action word
         else:
-            for keywords in key_services:
+            for keywords in get_services():
                 title = keywords
                 subtext = keywords
                 ico = './icons/icons_' + icon_color + "/filter.png"
@@ -288,7 +307,17 @@ class homeassistant(Wox):
                     }
                 })
 
-
+        if len(results) == 0:
+            if query in get_services():
+                subtext = "No Entities for " + query
+            else:
+                subtext = "No matches for: " + query
+            ico = './icons/icons_' + icon_color + '/info.png'
+            results.append({
+                "Title": "No results found",
+                "SubTitle": subtext,
+                "IcoPath":ico,
+            })
         return results
 
 if __name__ == "__main__":
