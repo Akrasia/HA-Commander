@@ -4,10 +4,9 @@ import urllib2,json,os.path
 #import time
 
 
-
-ha_ip = "127.0.0.1"
+ha_ip = "10.0.0.206"
 ha_port = "8123"
-ha_password = "my_password"
+ha_password = "akrasia1"
 url = 'http://' + ha_ip + ':' + ha_port + '/api/states?api_password=' + ha_password
 icon_color = 'white'
 key_services = ["group", "automation", "device_tracker", "sensor", "switch", "zone", "sun", "light", "switch", "media_player", "binary_sensor", "device_tracker", "persistent_notification"]
@@ -26,7 +25,13 @@ def post_data(url, postdata):
     return json.load(res)
 
 def removeNonAscii(s): return "".join(filter(lambda x: ord(x)<128, s))
-    
+
+#def get_services(service=None):
+#    if key_services != None:
+#        data = post_data('http://' + ha_ip + ':' + ha_port + '/api/bootstrap' + '?api_password=' + ha_password,"")
+#        for s in len(data['services']):
+#            key_services.append(services)
+
 def get_entity(type=None):
     services = []
     try:
@@ -82,13 +87,16 @@ def get_icon(entity_id,state):
 
 class homeassistant(Wox):
     #Active, toggle, trigger service
-    def activate(self, service, title, query):
+    def activate(self, service, title, query, arg):
         action = "toggle"
         if get_type(service) == "media_player":
             action = "media_play_pause"
         if query != title:
             action = None
-            WoxAPI.change_query("ha " + title + " ",True)
+            if arg in key_services:
+                WoxAPI.change_query("ha " + arg + " " + title + " ",True)
+            else:
+                WoxAPI.change_query("ha " + title + " ",True)
         try:
             if action != None:
                 post_data('http://' + ha_ip + ':' + ha_port + '/api/services/' + str(get_type(service)) + '/' + str(action) + '?api_password=' + ha_password,{ "entity_id": str(service) })
@@ -171,7 +179,7 @@ class homeassistant(Wox):
                             "IcoPath":ico,
                             "JsonRPCAction":{
                               "method": "activate",
-                              "parameters":[entity_id,title,query],
+                              "parameters":[entity_id,title,query,argument[0]],
                               "dontHideAfterAction":True,
                             }
                         })
@@ -184,12 +192,12 @@ class homeassistant(Wox):
                             "IcoPath":ico,
                             "JsonRPCAction":{
                               "method": "activate",
-                              "parameters":[entity_id,title,query],
+                              "parameters":[entity_id,title,query,argument[0]],
                               "dontHideAfterAction":True
                             }
                         })
                 #----Check to see if only one match and if exact match of title (No false positives when using filters)
-                if query.lower().strip().startswith(title.lower()):
+                if query.lower().strip().startswith(title.lower()) or query.lower().replace(argument[0],"",1).strip().startswith(title.lower()):
                     results = []
                     #----Add entry for every attribute
                     if not query.lower().replace(title.lower(),"",1).strip().startswith("info".lower()):
@@ -212,7 +220,7 @@ class homeassistant(Wox):
                                 "IcoPath":ico,
                                 "JsonRPCAction":{
                                   "method": "activate",
-                                  "parameters":[entity_id,title,query],
+                                  "parameters":[entity_id,title,query,argument[0]],
                                   "dontHideAfterAction":True
                                 }
                             })
@@ -223,7 +231,7 @@ class homeassistant(Wox):
                                 "IcoPath":ico,
                                 "JsonRPCAction":{
                                   "method": "activate",
-                                  "parameters":[entity_id,title,query],
+                                  "parameters":[entity_id,title,query,argument[0]],
                                   "dontHideAfterAction":True
                                 }
                             })
